@@ -87,7 +87,7 @@ class Llama:
         """
         if not dist.is_initialized():
             dist.init_process_group(
-                "gloo", init_method=dist_init_method, rank=rank, world_size=world_size
+                "nccl", init_method=dist_init_method, rank=rank, world_size=world_size
             )
         if not model_parallel_is_initialized():
             if model_parallel_size is None:
@@ -125,6 +125,10 @@ class Llama:
         model = Transformer(model_args)
         model.load_state_dict(checkpoint, strict=False)
         print(f"Loaded in {time.time() - start_time:.2f} seconds")
+
+        tmp_tensor = torch.zeros(1, device="cuda")
+        dist.all_reduce(tmp_tensor)
+        torch.cuda.synchronize()
 
         return Llama(model, tokenizer)
 
@@ -268,6 +272,17 @@ class Llama:
         if max_gen_len is None:
             max_gen_len = self.model.params.max_seq_len - 1
         prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=False) for x in prompts]
+        # for warmup
+        generation_tokens, generation_logprobs = self.generate(
+            prompt_tokens=prompt_tokens,
+            max_gen_len=max_gen_len,
+            temperature=temperature,
+            top_p=top_p,
+            logprobs=logprobs,
+            echo=echo,
+        )
+        torch.cuda.synchronize()
+        start_time = time.time()
         generation_tokens, generation_logprobs = self.generate(
             prompt_tokens=prompt_tokens,
             max_gen_len=max_gen_len,
