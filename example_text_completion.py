@@ -2,11 +2,14 @@
 # This software may be used and distributed according to the terms of the Llama 2 Community License Agreement.
 
 import fire
-from demo.util import get_distributed_init_method, get_ip, get_open_port
+import ray
 
+from demo.util import get_distributed_init_method, get_ip, get_open_port
 from llama import Llama
-from torch import multiprocessing
 from typing import List
+
+ray.init()
+
 
 def main(
     ckpt_dir: str,
@@ -30,12 +33,12 @@ def main(
         max_seq_len (int, optional): The maximum sequence length for input prompts. Defaults to 128.
         max_gen_len (int, optional): The maximum length of generated sequences. Defaults to 64.
         max_batch_size (int, optional): The maximum batch size for generating sequences. Defaults to 4.
-    """ 
+    """
     world_size = 2
     dist_init_method = get_distributed_init_method(get_ip(), get_open_port())
-    multiprocessing.spawn(
-        text_cmpl,
-        (
+    handles = [
+        ray.remote(num_gpus=1)(text_cmpl).remote(
+            rank,
             world_size,
             dist_init_method,
             ckpt_dir,
@@ -45,9 +48,11 @@ def main(
             max_seq_len,
             max_gen_len,
             max_batch_size,
-        ),
-        world_size,
-    )
+        )
+        for rank in range(world_size)
+    ]
+    ray.get(handles)
+
 
 def text_cmpl(
     rank: int,
