@@ -94,14 +94,14 @@ class Llama:
                 model_parallel_size = int(os.environ.get("WORLD_SIZE", world_size))
             initialize_model_parallel(model_parallel_size)
 
-        local_rank = int(os.environ.get("LOCAL_RANK", rank))
-        torch.cuda.set_device(local_rank)
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        torch.cuda.set_device(f"cuda:{local_rank}")
 
         # seed must be the same in all processes
         torch.manual_seed(seed)
 
-        if local_rank > 0:
-            sys.stdout = open(os.devnull, "w")
+        # if rank > 0:
+        #     sys.stdout = open(os.devnull, "w")
 
         start_time = time.time()
         checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
