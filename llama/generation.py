@@ -10,6 +10,7 @@ from typing import List, Literal, Optional, Tuple, TypedDict
 
 import torch
 import torch.nn.functional as F
+import torch.distributed as dist
 from fairscale.nn.model_parallel.initialize import (
     get_model_parallel_rank,
     initialize_model_parallel,
@@ -51,6 +52,9 @@ UNSAFE_ERROR = "Error: special tags are not allowed as part of the prompt."
 class Llama:
     @staticmethod
     def build(
+        rank: int,
+        world_size: int,
+        dist_init_method: str,
         ckpt_dir: str,
         tokenizer_path: str,
         max_seq_len: int,
@@ -81,14 +85,16 @@ class Llama:
             and loads the pre-trained model and tokenizer.
 
         """
-        if not torch.distributed.is_initialized():
-            torch.distributed.init_process_group("nccl")
+        if not dist.is_initialized():
+            dist.init_process_group(
+                "gloo", init_method=dist_init_method, rank=rank, world_size=world_size
+            )
         if not model_parallel_is_initialized():
             if model_parallel_size is None:
-                model_parallel_size = int(os.environ.get("WORLD_SIZE", 1))
+                model_parallel_size = int(os.environ.get("WORLD_SIZE", world_size))
             initialize_model_parallel(model_parallel_size)
 
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        local_rank = int(os.environ.get("LOCAL_RANK", rank))
         torch.cuda.set_device(local_rank)
 
         # seed must be the same in all processes

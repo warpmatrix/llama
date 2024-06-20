@@ -1,0 +1,4 @@
+[submodule "third/fairscale"]
+	path = third/fairscale
+	url = https://github.com/warpmatrix/fairscale.git
+	branch = feat/gloo

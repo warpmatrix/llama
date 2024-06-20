@@ -2,8 +2,10 @@
 # This software may be used and distributed according to the terms of the Llama 2 Community License Agreement.
 
 import fire
+from demo.util import get_distributed_init_method, get_ip, get_open_port
 
 from llama import Llama
+from torch import multiprocessing
 from typing import List
 
 def main(
@@ -29,7 +31,40 @@ def main(
         max_gen_len (int, optional): The maximum length of generated sequences. Defaults to 64.
         max_batch_size (int, optional): The maximum batch size for generating sequences. Defaults to 4.
     """ 
+    world_size = 2
+    dist_init_method = get_distributed_init_method(get_ip(), get_open_port())
+    multiprocessing.spawn(
+        text_cmpl,
+        (
+            world_size,
+            dist_init_method,
+            ckpt_dir,
+            tokenizer_path,
+            temperature,
+            top_p,
+            max_seq_len,
+            max_gen_len,
+            max_batch_size,
+        ),
+        world_size,
+    )
+
+def text_cmpl(
+    rank: int,
+    world_size: int,
+    dist_init_method: str,
+    ckpt_dir: str,
+    tokenizer_path: str,
+    temperature: float = 0.6,
+    top_p: float = 0.9,
+    max_seq_len: int = 128,
+    max_gen_len: int = 64,
+    max_batch_size: int = 4,
+):
     generator = Llama.build(
+        rank=rank,
+        world_size=world_size,
+        dist_init_method=dist_init_method,
         ckpt_dir=ckpt_dir,
         tokenizer_path=tokenizer_path,
         max_seq_len=max_seq_len,
